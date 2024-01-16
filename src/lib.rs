@@ -188,10 +188,15 @@ impl Plugin for Hardclipper {
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
                 
-        for channel_samples in buffer.iter_samples() {
-
-            for sample in channel_samples {
-
+        let channels = buffer.as_slice();
+        
+        // For each channel (L, R)
+        for i in 0..channels.len() {
+            let channel = channels.get_mut(i).unwrap();
+        
+            // For each element in the channel buffer (i.e. 1024 elements)
+            for j in 0..channel.len() {
+                let sample = channel.get_mut(j).unwrap();
                 *sample = self.clip(*sample);
             }
         }
