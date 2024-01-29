@@ -1,5 +1,12 @@
 use nih_plug::{prelude::*, log::{log, Level}};
-use std::sync::Arc;
+use std::{f32::consts::PI, sync::Arc};
+use std::f32;
+
+#[derive(Enum, PartialEq)]
+enum ClipMode {
+    Soft, 
+    Hard, 
+}
 
 struct Hardclipper {
     params: Arc<HardclipperParams>,
@@ -17,18 +24,32 @@ impl Default for Hardclipper {
 impl Hardclipper {
     /// Clip the given sample and return the result.
     fn clip(&self, sample: f32) -> f32 {
+        let mode = self.params.mode.value();
         let input_gain = self.params.input_gain.smoothed.next();
         let ceiling = self.params.ceiling.smoothed.next();
-        let reduce = self.params.reduce.smoothed.next();
+        // Invert the reduce value so that at 0%, no reductions (default), at 100%, full reduction.
+        let reduce = 1.0 - self.params.reduce.smoothed.next();
         let output_gain = self.params.output_gain.smoothed.next();
         let delta = self.params.delta.value();
 
         // Adjust the input gain.
         let input = sample * input_gain;
+        let abs = input.abs();
+
+        // For hard clip mode, return the ceiling value.
+        // For soft clip mode, apply the hyperbolic tangent function to the input.
+        let clipped = match mode {
+            ClipMode::Hard => ceiling,
+            ClipMode::Soft => ceiling + 
+                (abs - ceiling) * 
+                (PI / 2.0 * 
+                    (abs - ceiling) / (abs - ceiling + 1.0)
+                ).tanh()
+        };
                 
-        // Clip audio above the threshold.
-        let output = if input.abs() > ceiling {
-            input.signum() * ceiling * reduce
+        // Clip audio above the threshold, else return the original signal.
+        let output = if abs > ceiling {
+            input.signum() * clipped * reduce
         } else {
             input
         };
@@ -44,6 +65,9 @@ impl Hardclipper {
 
 #[derive(Params)]
 struct HardclipperParams {
+    #[id = "mode"]
+    pub mode: EnumParam<ClipMode>,
+
     #[id = "input_gain"]
     pub input_gain: FloatParam,
     
@@ -63,6 +87,12 @@ struct HardclipperParams {
 impl Default for HardclipperParams {
     fn default() -> Self {
         Self {
+            // ---------------------------------------------------------------- Clip Mode
+            mode: EnumParam::new(
+                "Clip Mode", 
+                ClipMode::Hard
+            ),
+
             // ---------------------------------------------------------------- Input
             input_gain: FloatParam::new(
                 "Input",
@@ -96,7 +126,7 @@ impl Default for HardclipperParams {
             // ---------------------------------------------------------------- Reduce
             reduce: FloatParam::new(
                 "Reduce",
-                1.0,
+                0.0,
                 FloatRange::Linear {
                     min: 0.0,
                     max: 1.0,
