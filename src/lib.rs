@@ -1,6 +1,9 @@
 use nih_plug::{prelude::*, log::{log, Level}};
+use nih_plug_vizia::ViziaState;
 use std::{f32::consts::PI, sync::Arc};
 use std::f32;
+
+mod editor;
 
 #[derive(Enum, PartialEq)]
 enum ClipMode {
@@ -65,6 +68,9 @@ impl Hardclipper {
 
 #[derive(Params)]
 struct HardclipperParams {
+    #[persist = "editor_state"]
+    editor_state: Arc<ViziaState>,
+
     #[id = "mode"]
     pub mode: EnumParam<ClipMode>,
 
@@ -87,6 +93,8 @@ struct HardclipperParams {
 impl Default for HardclipperParams {
     fn default() -> Self {
         Self {
+            editor_state: editor::default_state(),
+
             // ---------------------------------------------------------------- Clip Mode
             mode: EnumParam::new(
                 "Clip Mode", 
@@ -190,6 +198,13 @@ impl Plugin for Hardclipper {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        editor::create(
+            self.params.clone(),
+            self.params.editor_state.clone(),
+        )
     }
 
     fn initialize(
